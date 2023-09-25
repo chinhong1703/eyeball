@@ -1,0 +1,2 @@
+elasticsearch:
+  hostname: prod.elasticsearch.com

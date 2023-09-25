@@ -6,5 +6,3 @@ spring:
     jpa:
       url: jdbc:mariadb://localhost:3306/db1
 
-elasticsearch:
-  hostname: prod.elasticsearch.com
