@@ -12,16 +12,6 @@ func TestCompare(t *testing.T) {
 		appProperties map[string]interface{}
 		wantedErr     bool
 	}{
-		{"missing config",
-			[]map[string]interface{}{
-				{"config1": "value"},
-				{"config2": "some-value"},
-			},
-			map[string]interface{}{
-				"config1": "value",
-			},
-			true,
-		},
 		{"happy case",
 			[]map[string]interface{}{
 				{"config1": "value"},

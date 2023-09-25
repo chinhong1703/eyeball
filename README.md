@@ -46,8 +46,14 @@ prod: |
 ```
 
 Run eyeball as follows:
+
+- Check app properties files under a directory
+```bash
+$ eyeball -env prod -dir properties/prod/ -c master-config.yml
+```
+
+- Check a single property file
 ```bash
 $ eyeball -env prod -f src/main/resources/application.yml -c master-config.yml
 ```
-
 
