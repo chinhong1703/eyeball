@@ -1,0 +1,10 @@
+dev:
+ - spring.data.jpa.url: jdbc:mariadb://localhost:3306/dev
+uat:
+ - spring.data.jpa.url: jdbc:mariadb://localhost:3306/uat
+pre-prod:
+ - spring.data.jpa.url: jdbc:mariadb://localhost:3306/pre-prod
+prod:
+ - spring.data.jpa.url: jdbc:mariadb://localhost:3306/db1
+ - spring.data.redis.embedded: false
+ - elasticsearch.hostname: prod.elasticsearch.com

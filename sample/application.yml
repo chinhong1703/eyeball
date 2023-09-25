@@ -1,0 +1,10 @@
+spring:
+  data:
+    redis:
+      host: localhost:6381
+      embedded: false
+    jpa:
+      url: jdbc:mariadb://localhost:3306/db1
+
+elasticsearch:
+  hostname: prod.elasticsearch.com
