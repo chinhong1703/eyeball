@@ -1,0 +1,13 @@
+spring:
+  data:
+    redis:
+      host: redis.server.uat:6381
+      embedded: false
+    jpa:
+      url: jdbc:mariadb://mariadb.server.uat:3306/db1
+
+elasticsearch:
+  hosts:
+    - elasticsearch.server.uat:9200
+    - elasticsearch.server.uat:9300
+    - elasticsearch.server.uat:9400

@@ -3,12 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/jeremywohl/flatten"
-	"gopkg.in/yaml.v3"
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+
+	"github.com/jeremywohl/flatten"
+	"gopkg.in/yaml.v3"
 )
 
 type MasterConfig map[string][]map[string]interface{}
@@ -19,39 +21,48 @@ var appProperties map[string]map[string]interface{}
 
 func main() {
 	logArgs()
-	err := readMasterConfig(args.MasterConfigFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	envMasterConfig, err := getByEnv(masterConfig, args.Env)
-	if err != nil {
-		log.Fatal(err)
-	}
-	hasErrors := false
-	if args.AppPropertiesDir != "" {
-		appFiles := getAllYamlFilesInDirectory(args.AppPropertiesDir)
-		appProperties = getApplicationPropsFromYaml(appFiles)
-	}
 
-	if args.AppPropertiesFile != "" {
-		appProperties = getApplicationPropsFromYaml([]string{args.AppPropertiesFile})
-	}
-
-	for fileName, applicationProp := range appProperties {
-		fmt.Printf(">> checking file: %v\n", fileName)
-		if err = compare(envMasterConfig, applicationProp); err != nil {
-			fmt.Println(err.Error())
-			hasErrors = true
-		} else {
-			println(">>> SUCCESS")
+	if args.DiffMode {
+		if args.File1 == "" || args.File2 == "" {
+			log.Fatal("Both -f1 and -f2 arguments must be provided in diff mode")
 		}
-		println("==============================")
+		if err := compareYamlFiles(args.File1, args.File2); err != nil {
+			log.Fatalf("Error comparing YAML files: %v", err)
+		}
+		return
 	}
 
-	println(">>>> All application properties are verified")
-	println("~~~END~~~")
-	if hasErrors {
-		os.Exit(1)
+	if err := readMasterConfig(args.MasterConfigFile); err != nil {
+		log.Fatalf("Error reading master config file: %v", err)
+	}
+
+	masterConfigForEnv, err := getByEnv(masterConfig, args.Env)
+	if err != nil {
+		log.Fatalf("Error getting environment config: %v", err)
+	}
+
+	if args.AppPropertiesDir != "" {
+		yamlFiles := getAllYamlFilesInDirectory(args.AppPropertiesDir)
+		appPropsMap := getApplicationPropsFromYaml(yamlFiles)
+		for file, appProps := range appPropsMap {
+			if err := compare(masterConfigForEnv, appProps); err != nil {
+				log.Printf("Mismatch in file %s: %v", file, err)
+			} else {
+				log.Printf("File %s matches the master config", file)
+			}
+		}
+	} else if args.AppPropertiesFile != "" {
+		yamlFiles := []string{args.AppPropertiesFile}
+		appPropsMap := getApplicationPropsFromYaml(yamlFiles)
+		for file, appProps := range appPropsMap {
+			if err := compare(masterConfigForEnv, appProps); err != nil {
+				log.Printf("Mismatch in file %s: %v", file, err)
+			} else {
+				log.Printf("File %s matches the master config", file)
+			}
+		}
+	} else {
+		log.Fatal("No application properties file or directory specified")
 	}
 }
 
@@ -91,11 +102,70 @@ func compare(masterConfig []map[string]interface{}, appProperties map[string]int
 	return nil
 }
 
+func compareYamlFiles(file1, file2 string) error {
+	content1, err := os.ReadFile(file1)
+	if err != nil {
+		return err
+	}
+
+	content2, err := os.ReadFile(file2)
+	if err != nil {
+		return err
+	}
+
+	var yaml1, yaml2 map[string]interface{}
+	if err = yaml.Unmarshal(content1, &yaml1); err != nil {
+		return err
+	}
+	if err = yaml.Unmarshal(content2, &yaml2); err != nil {
+		return err
+	}
+
+	flatYaml1, err := flatten.Flatten(yaml1, "", flatten.DotStyle)
+	if err != nil {
+		return err
+	}
+	flatYaml2, err := flatten.Flatten(yaml2, "", flatten.DotStyle)
+	if err != nil {
+		return err
+	}
+
+	identical := true
+
+	for key, value1 := range flatYaml1 {
+		if value2, ok := flatYaml2[key]; ok {
+			if !reflect.DeepEqual(value1, value2) {
+				fmt.Printf("Difference found:\nKey: %s\nFile1: %v\nFile2: %v\n\n", key, value1, value2)
+				identical = false
+			}
+		} else {
+			fmt.Printf("Key %s found in File1 but not in File2\n\n", key)
+			identical = false
+		}
+	}
+
+	for key := range flatYaml2 {
+		if _, ok := flatYaml1[key]; !ok {
+			fmt.Printf("Key %s found in File2 but not in File1\n\n", key)
+			identical = false
+		}
+	}
+
+	if identical {
+		fmt.Println("The two YAML files are identical.")
+	}
+
+	return nil
+}
+
 type CmdLineArgs struct {
 	MasterConfigFile  string
 	AppPropertiesDir  string
 	AppPropertiesFile string
 	Env               string
+	DiffMode          bool   // New argument
+	File1             string // New argument
+	File2             string // New argument
 }
 
 func parseCli() CmdLineArgs {
@@ -103,11 +173,17 @@ func parseCli() CmdLineArgs {
 	var appPropertiesDir string
 	var appPropertiesFile string
 	var env string
+	var diffMode bool // New argument
+	var file1 string  // New argument
+	var file2 string  // New argument
 
 	flag.StringVar(&masterCfgFile, "c", "master-config.yml", "The master configuration file to use")
 	flag.StringVar(&appPropertiesDir, "dir", "", "The directory containing application properties files to verify")
 	flag.StringVar(&appPropertiesFile, "f", "", "The application properties file to verify")
 	flag.StringVar(&env, "env", "prod", "Specify the environment properties to check against")
+	flag.BoolVar(&diffMode, "diff", false, "Activate compare mode")     // New argument
+	flag.StringVar(&file1, "f1", "", "The first YAML file to compare")  // New argument
+	flag.StringVar(&file2, "f2", "", "The second YAML file to compare") // New argument
 	flag.Parse()
 
 	if appPropertiesDir != "" && appPropertiesFile != "" {
@@ -119,6 +195,9 @@ func parseCli() CmdLineArgs {
 		AppPropertiesDir:  appPropertiesDir,
 		AppPropertiesFile: appPropertiesFile,
 		Env:               env,
+		DiffMode:          diffMode, // New argument
+		File1:             file1,    // New argument
+		File2:             file2,    // New argument
 	}
 }
 
@@ -166,15 +245,22 @@ func logArgs() {
 	builder := strings.Builder{}
 
 	builder.WriteString(fmt.Sprintln("> Running eyeball with following arguments:"))
-	builder.WriteString(fmt.Sprintf("> Environment: %v\n", args.Env))
-	builder.WriteString(fmt.Sprintf("> Master Config File: %v\n", args.MasterConfigFile))
+	if args.DiffMode {
+		builder.WriteString(fmt.Sprintln("> Running in compare mode"))
+		builder.WriteString(fmt.Sprintf("> File 1: %v\n", args.File1))
+		builder.WriteString(fmt.Sprintf("> File 2: %v\n", args.File2))
+	} else {
+		builder.WriteString(fmt.Sprintf("> Environment: %v\n", args.Env))
+		builder.WriteString(fmt.Sprintf("> Master Config File: %v\n", args.MasterConfigFile))
 
-	if args.AppPropertiesDir != "" {
-		builder.WriteString(fmt.Sprintf("> Application Properties Directory: %v\n", args.AppPropertiesDir))
+		if args.AppPropertiesDir != "" {
+			builder.WriteString(fmt.Sprintf("> Application Properties Directory: %v\n", args.AppPropertiesDir))
+		}
+		if args.AppPropertiesFile != "" {
+			builder.WriteString(fmt.Sprintf("> Application Properties File: %v\n", args.AppPropertiesFile))
+		}
 	}
-	if args.AppPropertiesFile != "" {
-		builder.WriteString(fmt.Sprintf("> Application Properties File: %v\n", args.AppPropertiesFile))
-	}
+
 	fmt.Print(builder.String())
 	println("==============================")
 }

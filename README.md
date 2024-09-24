@@ -30,7 +30,6 @@ spring:
             url: jdbc:mariadb://localhost:3306/db1 
 ```
 
-
 Prepare a master configuration file to serve as the basis for verification:
 
 master-config.yml
@@ -57,3 +56,16 @@ $ eyeball -env prod -dir properties/prod/ -c master-config.yml
 $ eyeball -env prod -f src/main/resources/application.yml -c master-config.yml
 ```
 
+### Compare two YAML files
+To activate compare mode and compare two YAML files, use the `--diff` argument along with `-f1` and `-f2` to specify the files to compare:
+
+```bash
+$ eyeball --diff -f1 path/to/first/file.yaml -f2 path/to/second/file.yaml
+```
+
+In this example:
+- `--diff` activates the compare mode.
+- `-f1` specifies the path to the first YAML file.
+- `-f2` specifies the path to the second YAML file.
+
+Make sure to replace `path/to/first/file.yaml` and `path/to/second/file.yaml` with the actual paths to the YAML files you want to compare.
