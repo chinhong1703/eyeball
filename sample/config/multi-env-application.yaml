@@ -1,0 +1,168 @@
+# Common configurations shared across all environments
+spring:
+  application:
+    name: my-spring-app
+
+---
+# Development Environment
+spring:
+  config:
+    activate:
+      on-profile: dev
+  
+  datasource:
+    url: jdbc:mysql://localhost:3306/myapp_dev
+    username: dev_user
+    password: dev_pass
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    
+  redis:
+    host: localhost
+    port: 6379
+    
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: dev@company.com
+    password: dev_smtp_pass
+    
+server:
+  port: 8080
+  
+logging:
+  level:
+    root: DEBUG
+    org.springframework: DEBUG
+    com.myapp: DEBUG
+    
+app:
+  security:
+    jwt:
+      secret: dev_jwt_secret_key
+      expiration: 86400000  # 24 hours
+  api:
+    external-service-url: http://dev-api.external-service.com
+  feature-flags:
+    new-feature: true
+    beta-feature: true
+
+---
+# Staging Environment
+spring:
+  config:
+    activate:
+      on-profile: staging
+  
+  datasource:
+    url: jdbc:mysql://staging-db.company.com:3306/myapp_staging
+    username: staging_user
+    password: staging_pass
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    
+  redis:
+    host: staging-redis.company.com
+    port: 6379
+    
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: staging@company.com
+    password: staging_smtp_pass
+    
+server:
+  port: 8080
+  
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+    com.myapp: DEBUG
+    
+app:
+  security:
+    jwt:
+      secret: staging_jwt_secret_key
+      expiration: 86400000
+  api:
+    external-service-url: http://staging-api.external-service.com
+  feature-flags:
+    new-feature: true
+    beta-feature: false
+
+---
+# Production Environment
+spring:
+  config:
+    activate:
+      on-profile: prod
+  
+  datasource:
+    url: jdbc:mysql://prod-db.company.com:3306/myapp_prod
+    username: ${PROD_DB_USERNAME}  # Using environment variables for sensitive data
+    password: ${PROD_DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        
+  redis:
+    host: prod-redis.company.com
+    port: 6379
+    password: ${REDIS_PASSWORD}
+    
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+    
+server:
+  port: 80
+  ssl:
+    enabled: true
+    key-store: classpath:keystore.p12
+    key-store-password: ${SSL_KEY_PASSWORD}
+  
+logging:
+  level:
+    root: WARN
+    org.springframework: ERROR
+    com.myapp: INFO
+  file:
+    name: /var/log/myapp/application.log
+    max-size: 100MB
+    max-history: 30
+    
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      expiration: 3600000  # 1 hour
+  api:
+    external-service-url: https://api.external-service.com
+  feature-flags:
+    new-feature: false
+    beta-feature: false
+  cache:
+    ttl: 3600
+  rate-limit:
+    max-requests: 1000
+    time-window: 60

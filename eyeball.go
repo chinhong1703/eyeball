@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -15,12 +16,29 @@ import (
 
 type MasterConfig map[string][]map[string]interface{}
 
+type MultiEnvConfig struct {
+	Environments map[string]map[string]interface{}
+}
+
 var args = parseCli()
 var masterConfig = MasterConfig{}
 var appProperties map[string]map[string]interface{}
 
 func main() {
 	logArgs()
+
+	if args.MultiEnvMode {
+		if args.MultiEnvFile == "" {
+			log.Fatal("Multi-environment file (-mf) must be specified when using -multi mode")
+		}
+		if args.MasterConfigFile == "" {
+			log.Fatal("Master config file (-c) must be specified when using -multi mode")
+		}
+		if err := handleMultiEnvFile(args.MultiEnvFile); err != nil {
+			log.Fatalf("Error processing multi-environment file: %v", err)
+		}
+		return
+	}
 
 	if args.DiffMode {
 		if args.File1 == "" || args.File2 == "" {
@@ -86,17 +104,15 @@ func getByEnv(config MasterConfig, env string) ([]map[string]interface{}, error)
 }
 
 func compare(masterConfig []map[string]interface{}, appProperties map[string]interface{}) error {
-
 	for _, required := range masterConfig {
 		for requiredKey, requiredValue := range required {
 			val, ok := appProperties[requiredKey]
 			if !ok {
-				continue
+				return fmt.Errorf("required key not found\n key=%v", requiredKey)
 			}
 			if val != requiredValue {
 				return fmt.Errorf("value does not match\n key=%v \n want=%v \n got=%v", requiredKey, requiredValue, val)
 			}
-
 		}
 	}
 	return nil
@@ -163,9 +179,11 @@ type CmdLineArgs struct {
 	AppPropertiesDir  string
 	AppPropertiesFile string
 	Env               string
-	DiffMode          bool   // New argument
-	File1             string // New argument
-	File2             string // New argument
+	DiffMode          bool
+	File1             string
+	File2             string
+	MultiEnvMode      bool
+	MultiEnvFile      string
 }
 
 func parseCli() CmdLineArgs {
@@ -173,17 +191,21 @@ func parseCli() CmdLineArgs {
 	var appPropertiesDir string
 	var appPropertiesFile string
 	var env string
-	var diffMode bool // New argument
-	var file1 string  // New argument
-	var file2 string  // New argument
+	var diffMode bool
+	var file1 string
+	var file2 string
+	var multiEnvMode bool
+	var multiEnvFile string
 
 	flag.StringVar(&masterCfgFile, "c", "master-config.yml", "The master configuration file to use")
 	flag.StringVar(&appPropertiesDir, "dir", "", "The directory containing application properties files to verify")
 	flag.StringVar(&appPropertiesFile, "f", "", "The application properties file to verify")
 	flag.StringVar(&env, "env", "prod", "Specify the environment properties to check against")
-	flag.BoolVar(&diffMode, "diff", false, "Activate compare mode")     // New argument
-	flag.StringVar(&file1, "f1", "", "The first YAML file to compare")  // New argument
-	flag.StringVar(&file2, "f2", "", "The second YAML file to compare") // New argument
+	flag.BoolVar(&diffMode, "diff", false, "Activate compare mode")
+	flag.StringVar(&file1, "f1", "", "The first YAML file to compare")
+	flag.StringVar(&file2, "f2", "", "The second YAML file to compare")
+	flag.BoolVar(&multiEnvMode, "multi", false, "Activate multi-environment validation mode")
+	flag.StringVar(&multiEnvFile, "mf", "", "The multi-environment YAML file to validate")
 	flag.Parse()
 
 	if appPropertiesDir != "" && appPropertiesFile != "" {
@@ -195,9 +217,11 @@ func parseCli() CmdLineArgs {
 		AppPropertiesDir:  appPropertiesDir,
 		AppPropertiesFile: appPropertiesFile,
 		Env:               env,
-		DiffMode:          diffMode, // New argument
-		File1:             file1,    // New argument
-		File2:             file2,    // New argument
+		DiffMode:          diffMode,
+		File1:             file1,
+		File2:             file2,
+		MultiEnvMode:      multiEnvMode,
+		MultiEnvFile:      multiEnvFile,
 	}
 }
 
@@ -241,11 +265,14 @@ func getApplicationPropsFromYaml(yamlFiles []string) map[string]map[string]inter
 }
 
 func logArgs() {
-
 	builder := strings.Builder{}
 
 	builder.WriteString(fmt.Sprintln("> Running eyeball with following arguments:"))
-	if args.DiffMode {
+	if args.MultiEnvMode {
+		builder.WriteString(fmt.Sprintln("> Running in multi-environment mode"))
+		builder.WriteString(fmt.Sprintf("> Multi-environment File: %v\n", args.MultiEnvFile))
+		builder.WriteString(fmt.Sprintf("> Master Config File: %v\n", args.MasterConfigFile))
+	} else if args.DiffMode {
 		builder.WriteString(fmt.Sprintln("> Running in compare mode"))
 		builder.WriteString(fmt.Sprintf("> File 1: %v\n", args.File1))
 		builder.WriteString(fmt.Sprintf("> File 2: %v\n", args.File2))
@@ -264,3 +291,96 @@ func logArgs() {
 	fmt.Print(builder.String())
 	println("==============================")
 }
+
+func handleMultiEnvFile(filename string) error {
+	if err := readMasterConfig(args.MasterConfigFile); err != nil {
+		return fmt.Errorf("error reading master config file: %v", err)
+	}
+
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("error reading file: %v", err)
+	}
+
+	var docs []map[string]interface{}
+	decoder := yaml.NewDecoder(strings.NewReader(string(content)))
+	for {
+		var doc map[string]interface{}
+		if err := decoder.Decode(&doc); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("error decoding YAML: %v", err)
+		}
+		if doc != nil {
+			docs = append(docs, doc)
+		}
+	}
+
+	foundMismatch := false
+	for _, doc := range docs {
+		if spring, ok := doc["spring"].(map[string]interface{}); ok {
+			if config, ok := spring["config"].(map[string]interface{}); ok {
+				if activate, ok := config["activate"].(map[string]interface{}); ok {
+					if profile, ok := activate["on-profile"].(string); ok {
+						flat, err := flatten.Flatten(doc, "", flatten.DotStyle)
+						if err != nil {
+							return fmt.Errorf("error flattening document: %v", err)
+						}
+
+						fmt.Printf("\n=== Environment: %s ===\n", profile)
+						fmt.Printf("Configuration keys found: %d\n", len(flat))
+						
+						masterConfigForEnv, err := getByEnv(masterConfig, profile)
+						if err != nil {
+							fmt.Printf("WARNING: Environment %s not found in master config\n", profile)
+							foundMismatch = true
+							continue
+						}
+
+						if err := compare(masterConfigForEnv, flat); err != nil {
+							fmt.Printf("MISMATCH in %s environment: %v\n", profile, err)
+							foundMismatch = true
+						} else {
+							fmt.Printf("SUCCESS: %s environment matches master config\n", profile)
+						}
+
+						// Check for sensitive data in non-prod environments
+						if profile != "prod" {
+							checkSensitiveData(flat, profile)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if foundMismatch {
+		return fmt.Errorf("one or more environments had mismatches")
+	}
+	return nil
+}
+
+func checkSensitiveData(config map[string]interface{}, env string) {
+	sensitivePatterns := []string{
+		"password",
+		"secret",
+		"key",
+		"token",
+		"credential",
+	}
+
+	for key, value := range config {
+		for _, pattern := range sensitivePatterns {
+			if strings.Contains(strings.ToLower(key), pattern) {
+				strValue, ok := value.(string)
+				if ok && !strings.Contains(strValue, "${") {
+					fmt.Printf("WARNING: Possible hardcoded sensitive data found in %s environment\n"+
+						"Key: %s\n"+
+						"Consider using environment variables instead\n", env, key)
+				}
+			}
+		}
+	}
+}
+

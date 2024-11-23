@@ -1,13 +1,20 @@
-spring:
-  data:
-    redis:
-      host: localhost:6381
-      embedded: false
-    jpa:
-      url: jdbc:mariadb://localhost:3306/db1
+database:
+  url: "jdbc:mysql://prod-db:3306/myapp"
+  username: "prod_user"
+  password: "prod_pass"
 
-elasticsearch:
-  hosts:
-    - localhost:9200
-    - localhost:9300
-    - localhost:9400
+api:
+  timeout: 60
+  retry: 3
+  endpoints:
+    - "/api/v1"
+    - "/api/v2"
+
+feature:
+  flag:
+    beta: false
+    experimental: true
+
+logging:
+  level: INFO
+  path: "/var/log/myapp"

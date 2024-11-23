@@ -1,12 +1,20 @@
 dev:
- - spring.data.jpa.url: jdbc:mariadb://localhost:3306/dev
-uat:
- - spring.data.jpa.url: jdbc:mariadb://localhost:3306/uat
-pre-prod:
- - spring.data.jpa.url: jdbc:mariadb://localhost:3306/pre-prod
+  - database.url: "jdbc:mysql://dev-db:3306/myapp"
+    database.username: "dev_user"
+    database.password: "dev_pass"
+    api.timeout: 30
+    feature.flag.beta: true
+
+staging:
+  - database.url: "jdbc:mysql://staging-db:3306/myapp"
+    database.username: "staging_user"
+    database.password: "staging_pass"
+    api.timeout: 45
+    feature.flag.beta: true
+
 prod:
- - spring.data.jpa.url: jdbc:mariadb://localhost:3306/db1
- - spring.data.redis.embedded: false
- - elasticsearch.hostname: prod.elasticsearch.com
- - elasticsearch.hosts.0: localhost:9200
- - elasticsearch.hosts.1: localhost:9300
+  - database.url: "jdbc:mysql://prod-db:3306/myapp"
+    database.username: "prod_user"
+    database.password: "prod_pass"
+    api.timeout: 60
+    feature.flag.beta: false
